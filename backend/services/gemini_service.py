@@ -9,7 +9,7 @@ load_dotenv()
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-2.5-flash")
 
 NUTRITION_PROMPT = """
 You are a nutrition label analyzer. Analyze the nutrition label in this image and extract the following information in JSON format only. Do not include any explanation or markdown, just raw JSON.

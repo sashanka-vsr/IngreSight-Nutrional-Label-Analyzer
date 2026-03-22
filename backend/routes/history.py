@@ -114,3 +114,51 @@ async def delete_product(product_id: str):
             status_code=500,
             detail=f"Failed to delete product: {str(e)}"
         )
+
+@router.patch("/history/{product_id}/update-name")
+async def update_product_name(product_id: str, data: dict):
+    try:
+        from bson import ObjectId
+
+        if not ObjectId.is_valid(product_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid product ID format"
+            )
+
+        update_fields = {}
+        if "product_name" in data and data["product_name"]:
+            update_fields["product_name"] = data["product_name"]
+        if "brand" in data and data["brand"]:
+            update_fields["brand"] = data["brand"]
+
+        if not update_fields:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid fields to update"
+            )
+
+        result = products_collection.update_one(
+            {"_id": ObjectId(product_id)},
+            {"$set": update_fields}
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="Product not found"
+            )
+
+        return {
+            "status": "success",
+            "message": "Product name updated successfully"
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update product: {str(e)}"
+        )

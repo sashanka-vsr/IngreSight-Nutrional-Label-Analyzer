@@ -17,18 +17,14 @@ def find_existing_product(product_name: str, brand: str):
     if not product_name:
         return None
     
+    normalized = normalize_name(product_name)
+    
     query = {
         "product_name": {
-            "$regex": f"^{re.escape(normalize_name(product_name))}$",
+            "$regex": f"^{re.escape(normalized)}$",
             "$options": "i"
         }
     }
-    
-    if brand:
-        query["brand"] = {
-            "$regex": f"^{re.escape(normalize_name(brand))}$",
-            "$options": "i"
-        }
     
     return products_collection.find_one(query)
 

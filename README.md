@@ -55,7 +55,7 @@ IngreSight is a minor academic project built to help users make informed food ch
 ---
 
 ## 📁 Folder Structure
-
+```
 ingresight/
 ├── README.md
 ├── .gitignore
@@ -100,7 +100,7 @@ ingresight/
         └── services/
             └── api.js           ← All backend API calls
 
-
+```
 ---
 
 ## ⚙️ Scoring Model

@@ -79,7 +79,7 @@ The product received a health score of {health_score}/100 where 100 is perfectly
 Based on this data, provide insights in the following JSON format only. No markdown, no explanation, just raw JSON:
 
 {{
-    "summary": "2-3 sentence plain language summary of the product's overall healthiness",
+    "summary": "5 sentences of plain language summary of the product's overall healthiness",
     "consumption_frequency": "one of: Daily, 2-3 times per week, Once a week, Once or twice a month, Avoid",
     "frequency_reason": "one sentence explaining why this frequency is recommended",
     "positives": ["list", "of", "good", "things", "about", "this", "product"],

@@ -25,14 +25,14 @@ function AppRoutes() {
     <>
       <Navbar />
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<Protected><Home /></Protected>} />
         <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
         <Route path="/catalogue" element={<Catalogue />} />
-        <Route path="/stats" element={<Stats />} />
-        <Route path="/about" element={<About />} />
+        <Route path="/stats" element={<Protected><Stats /></Protected>} />
+        <Route path="/about" element={<Protected><About /></Protected>} />
         <Route path="/history" element={<Protected><History /></Protected>} />
         <Route path="/profile" element={<Protected><Profile /></Protected>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to={user ? "/" : "/catalogue"} replace />} />
       </Routes>
     </>
   );

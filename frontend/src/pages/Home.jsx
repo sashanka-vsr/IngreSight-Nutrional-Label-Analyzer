@@ -122,10 +122,6 @@ export default function Home() {
         <div className="hero-bg" />
         <div className="hero-glow" />
 
-        <div className="hero-badge">
-          <span>✨</span> Powered by Gemini 2.5 Flash Vision
-        </div>
-
         <h1 className="hero-title">
           Know What's<br />
           <span>Really Inside</span> Your Food

@@ -29,13 +29,17 @@ export default function Navbar() {
 
       {/* Links */}
       <div className={`navbar-links${menuOpen ? ' open' : ''}`}>
-        <NavLink to="/" className={navLinkClass} end onClick={closeMenu}>Home</NavLink>
+        {user && (
+          <NavLink to="/" className={navLinkClass} end onClick={closeMenu}>Home</NavLink>
+        )}
         <NavLink to="/catalogue" className={navLinkClass} onClick={closeMenu}>Catalogue</NavLink>
         {user && (
-          <NavLink to="/history" className={navLinkClass} onClick={closeMenu}>History</NavLink>
+          <>
+            <NavLink to="/history" className={navLinkClass} onClick={closeMenu}>History</NavLink>
+            <NavLink to="/stats" className={navLinkClass} onClick={closeMenu}>Stats</NavLink>
+            <NavLink to="/about" className={navLinkClass} onClick={closeMenu}>About</NavLink>
+          </>
         )}
-        <NavLink to="/stats" className={navLinkClass} onClick={closeMenu}>Stats</NavLink>
-        <NavLink to="/about" className={navLinkClass} onClick={closeMenu}>About</NavLink>
       </div>
 
       {/* Right side */}

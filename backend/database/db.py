@@ -1,18 +1,18 @@
-from pymongo import MongoClient, ASCENDING
-from dotenv import load_dotenv
 import os
+from motor.motor_asyncio import AsyncIOMotorClient
+from dotenv import load_dotenv
 
 load_dotenv()
 
 MONGODB_URI = os.getenv("MONGODB_URI")
 
-client = MongoClient(MONGODB_URI)
+client = AsyncIOMotorClient(MONGODB_URI)
+database = client["ingresight"]
 
-db = client["ingresight"]
+# Collections
+db = database          # keep using db.products everywhere as before
 
-products_collection = db["products"]
 
-products_collection.create_index(
-    [("product_name", ASCENDING), ("brand", ASCENDING)],
-    sparse=True
-)
+# Expose collections explicitly for clarity
+# db.products  → existing products collection
+# db.users     → new users collection (created automatically by MongoDB on first insert)

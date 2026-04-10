@@ -25,8 +25,10 @@ def score_sugar(sugar):
         return 60
     elif sugar <= 15:
         return 40
+    elif sugar <= 20:
+        return 25    # ← new tier
     else:
-        return 20
+        return 10    # ← was 20, now 10
 
 def score_sodium(sodium):
     if sodium is None:
@@ -92,8 +94,8 @@ def score_protein(protein):
         return 40
 
 WEIGHTS = {
-    "calories": 0.25,
-    "sugar":    0.25,
+    "calories": 0.20,   # ← was 0.25
+    "sugar":    0.30,   # ← was 0.25
     "sodium":   0.20,
     "fat":      0.15,
     "fiber":    0.10,
@@ -101,20 +103,24 @@ WEIGHTS = {
 }
 
 def compute_health_score(nutrition: NutritionData) -> dict:
-    
     breakdown = {
         "calories": score_calories(nutrition.calories),
-        "sugar":    score_sugar(nutrition.total_sugars),
-        "sodium":   score_sodium(nutrition.sodium),
-        "fat":      score_fat(nutrition.total_fat, nutrition.saturated_fat),
-        "fiber":    score_fiber(nutrition.dietary_fiber),
-        "protein":  score_protein(nutrition.protein),
+        "sugar": score_sugar(nutrition.total_sugars),
+        "sodium": score_sodium(nutrition.sodium),
+        "fat": score_fat(nutrition.total_fat, nutrition.saturated_fat),
+        "fiber": score_fiber(nutrition.dietary_fiber),
+        "protein": score_protein(nutrition.protein),
     }
     
     final_score = sum(
         breakdown[nutrient] * WEIGHTS[nutrient]
         for nutrient in breakdown
     )
+    
+    # Sugar penalty: if total sugars > 15g, apply 15% penalty to final score
+    # This prevents sugary drinks from scoring high due to zero fat/sodium
+    if nutrition.total_sugars is not None and nutrition.total_sugars > 15:
+        final_score *= 0.85
     
     return {
         "score": round(final_score, 1),

@@ -84,11 +84,11 @@ export default function History() {
     <div className="page">
       <div style={{ marginBottom: '1.5rem' }}>
         <h1 className="page-title">My History</h1>
-        <p className="page-subtitle">
+        {/* <p className="page-subtitle">
           {pagination.total > 0
             ? `${pagination.total} product${pagination.total !== 1 ? 's' : ''} scanned by you`
             : 'Your scanned products will appear here'}
-        </p>
+        </p> */}
       </div>
 
       {products.length === 0 ? (

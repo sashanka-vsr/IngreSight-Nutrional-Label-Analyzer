@@ -20,9 +20,20 @@ async function handleResponse(res) {
   return res.json();
 }
 
+async function safeFetch(url, options = {}) {
+  try {
+    return await fetch(url, options);
+  } catch (err) {
+    if (err instanceof TypeError) {
+      throw new Error('Cannot reach backend server at http://localhost:8000. Start backend and try again.');
+    }
+    throw err;
+  }
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export async function register(username, email, password) {
-  const res = await fetch(`${BASE}/api/auth/register`, {
+  const res = await safeFetch(`${BASE}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, email, password }),
@@ -31,7 +42,7 @@ export async function register(username, email, password) {
 }
 
 export async function login(email, password) {
-  const res = await fetch(`${BASE}/api/auth/login`, {
+  const res = await safeFetch(`${BASE}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -40,12 +51,12 @@ export async function login(email, password) {
 }
 
 export async function getMe() {
-  const res = await fetch(`${BASE}/api/auth/me`, { headers: authHeaders() });
+  const res = await safeFetch(`${BASE}/api/auth/me`, { headers: authHeaders() });
   return handleResponse(res);
 }
 
 export async function changePassword(currentPassword, newPassword) {
-  const res = await fetch(`${BASE}/api/auth/change-password`, {
+  const res = await safeFetch(`${BASE}/api/auth/change-password`, {
     method: 'PATCH',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
@@ -54,7 +65,7 @@ export async function changePassword(currentPassword, newPassword) {
 }
 
 export async function deleteAccount() {
-  const res = await fetch(`${BASE}/api/auth/delete-account`, {
+  const res = await safeFetch(`${BASE}/api/auth/delete-account`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -68,7 +79,7 @@ export async function analyzeLabel(file, forceNew = false) {
   form.append('file', file);
   form.append('force_new', forceNew ? 'true' : 'false');
 
-  const res = await fetch(`${BASE}/api/analyze`, {
+  const res = await safeFetch(`${BASE}/api/analyze`, {
     method: 'POST',
     headers: authHeaders(), // no Content-Type — browser sets multipart boundary
     body: form,
@@ -78,7 +89,7 @@ export async function analyzeLabel(file, forceNew = false) {
 
 // Called after user manually enters product name for a "needs_name" result
 export async function storeProduct(productData, productName, brand) {
-  const res = await fetch(`${BASE}/api/store-product`, {
+  const res = await safeFetch(`${BASE}/api/store-product`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ ...productData, product_name: productName, brand }),
@@ -88,21 +99,21 @@ export async function storeProduct(productData, productName, brand) {
 
 // ── History ───────────────────────────────────────────────────────────────────
 export async function getHistory(page = 1, limit = 10) {
-  const res = await fetch(`${BASE}/api/history?page=${page}&limit=${limit}`, {
+  const res = await safeFetch(`${BASE}/api/history?page=${page}&limit=${limit}`, {
     headers: authHeaders(),
   });
   return handleResponse(res);
 }
 
 export async function getProduct(id) {
-  const res = await fetch(`${BASE}/api/history/${id}`, {
+  const res = await safeFetch(`${BASE}/api/history/${id}`, {
     headers: authHeaders(),
   });
   return handleResponse(res);
 }
 
 export async function removeFromHistory(id) {
-  const res = await fetch(`${BASE}/api/history/${id}`, {
+  const res = await safeFetch(`${BASE}/api/history/${id}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -112,18 +123,18 @@ export async function removeFromHistory(id) {
 // ── Catalogue ─────────────────────────────────────────────────────────────────
 export async function getCatalogue(search = '') {
   const params = search ? `?search=${encodeURIComponent(search)}` : '';
-  const res = await fetch(`${BASE}/api/catalogue${params}`);
+  const res = await safeFetch(`${BASE}/api/catalogue${params}`);
   return handleResponse(res);
 }
 
 export async function getProduct_public(id) {
   // Public endpoint — no auth needed — to fetch full product for catalogue modal
-  const res = await fetch(`${BASE}/api/history/${id}`);
+  const res = await safeFetch(`${BASE}/api/history/${id}`);
   return handleResponse(res);
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 export async function getStats() {
-  const res = await fetch(`${BASE}/api/stats`);
+  const res = await safeFetch(`${BASE}/api/stats`);
   return handleResponse(res);
 }

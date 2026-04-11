@@ -3,23 +3,45 @@ from models.product import ProductAnalysis
 from services.scoring_service import compute_health_score, generate_explanation
 from services.gemini_service import generate_health_insights
 from datetime import datetime, timezone
+from typing import Optional
+import re
+
+
+def _to_float(value) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        text = value.strip().lower().replace(",", "")
+        if not text:
+            return None
+        if text in {"n/a", "na", "none", "null", "-"}:
+            return None
+        match = re.search(r"-?\d+(\.\d+)?", text)
+        if match:
+            try:
+                return float(match.group(0))
+            except ValueError:
+                return None
+    return None
 
 def build_product_analysis(raw_data: dict, image_filename: str = None) -> ProductAnalysis:
 
     nutrition = NutritionData(
-        calories=raw_data.get("calories"),
-        total_fat=raw_data.get("total_fat"),
-        saturated_fat=raw_data.get("saturated_fat"),
-        trans_fat=raw_data.get("trans_fat"),
-        cholesterol=raw_data.get("cholesterol"),
-        sodium=raw_data.get("sodium"),
-        total_carbohydrates=raw_data.get("total_carbohydrates"),
-        dietary_fiber=raw_data.get("dietary_fiber"),
-        total_sugars=raw_data.get("total_sugars"),
-        added_sugars=raw_data.get("added_sugars"),
-        protein=raw_data.get("protein"),
+        calories=_to_float(raw_data.get("calories")),
+        total_fat=_to_float(raw_data.get("total_fat")),
+        saturated_fat=_to_float(raw_data.get("saturated_fat")),
+        trans_fat=_to_float(raw_data.get("trans_fat")),
+        cholesterol=_to_float(raw_data.get("cholesterol")),
+        sodium=_to_float(raw_data.get("sodium")),
+        total_carbohydrates=_to_float(raw_data.get("total_carbohydrates")),
+        dietary_fiber=_to_float(raw_data.get("dietary_fiber")),
+        total_sugars=_to_float(raw_data.get("total_sugars")),
+        added_sugars=_to_float(raw_data.get("added_sugars")),
+        protein=_to_float(raw_data.get("protein")),
         serving_size=raw_data.get("serving_size"),
-        servings_per_container=raw_data.get("servings_per_container"),
+        servings_per_container=_to_float(raw_data.get("servings_per_container")),
     )
 
     score_result = compute_health_score(nutrition)

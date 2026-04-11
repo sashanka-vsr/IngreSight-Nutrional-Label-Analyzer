@@ -6,6 +6,7 @@ from jose import jwt, JWTError
 import os
 
 from database.db import db
+from services.product_match import skeleton_field_updates
 
 router = APIRouter(prefix="/api/history", tags=["history"])
 
@@ -115,11 +116,14 @@ async def update_product_name(
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
+        pname = data.get("product_name", "") or ""
+        b = data.get("brand", "") or ""
         result = await db.products.update_one(
             {"_id": ObjectId(product_id)},
             {"$set": {
-                "product_name": data.get("product_name", ""),
-                "brand": data.get("brand", "")
+                "product_name": pname,
+                "brand": b,
+                **skeleton_field_updates(pname, b),
             }}
         )
     except Exception:

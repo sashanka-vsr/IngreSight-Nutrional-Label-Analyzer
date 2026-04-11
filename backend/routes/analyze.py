@@ -6,10 +6,12 @@ from bson import ObjectId
 from datetime import datetime
 import re
 import os
+import hashlib
 
 from database.db import db
 from services.gemini_service import extract_nutrition_from_image
 from services.report_service import build_product_analysis
+from services.product_match import name_skeleton, intercalated_regex, skeleton_field_updates
 
 router = APIRouter()
 
@@ -44,8 +46,12 @@ def score_to_label(score: float) -> str:
 
 
 def serialize(doc: dict) -> dict:
-    doc["_id"] = str(doc["_id"])
-    return doc
+    out = {**doc, "_id": str(doc["_id"])}
+    return out
+
+
+def sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
 
 async def find_existing(product_name: str):
@@ -57,12 +63,118 @@ async def find_existing(product_name: str):
     })
 
 
+async def find_by_image_hash(image_hash: str):
+    if not image_hash:
+        return None
+    return await db.products.find_one({"label_image_hash": image_hash})
+
+
+async def find_by_user_name_and_brand(product_name: str, brand: Optional[str]):
+    doc = await find_existing(product_name)
+    if not doc:
+        return None
+    b = (brand or "").strip()
+    if not b:
+        return doc
+    db_br = (doc.get("brand") or "").strip()
+    if not db_br:
+        return doc
+    if normalize_name(db_br) != normalize_name(b):
+        return None
+    return doc
+
+
+def names_equivalent(detected: str, user_entered: str) -> bool:
+    d = (detected or "").strip()
+    u = (user_entered or "").strip()
+    if not d:
+        return True
+    if normalize_name(d) == normalize_name(u):
+        return True
+    sd, su = name_skeleton(d), name_skeleton(u)
+    if sd and su and sd == su:
+        return True
+    return False
+
+
+async def attach_scan_to_user(user_id: Optional[str], product_oid: ObjectId):
+    if not user_id:
+        return
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$addToSet": {"scan_history": str(product_oid)}}
+    )
+
+
+async def maybe_backfill_skeleton_fields(doc: Optional[dict]):
+    if not doc or not doc.get("_id"):
+        return
+    if doc.get("product_name_skeleton"):
+        return
+    await db.products.update_one(
+        {"_id": doc["_id"]},
+        {"$set": skeleton_field_updates(doc.get("product_name") or "", doc.get("brand") or "")},
+    )
+
+
+async def resolve_cached_product(product_name: str, brand: Optional[str]):
+    """
+    Find an existing catalogue row for the same product identity (exact, skeleton key,
+    or tolerant spacing/punctuation). Returns (doc, reason) or (None, None).
+    """
+    pn = (product_name or "").strip()
+    b = (brand or "").strip()
+    if not pn:
+        return None, None
+
+    doc = await find_by_user_name_and_brand(pn, b)
+    if doc:
+        return doc, "exact_match"
+
+    nsk = name_skeleton(pn)
+    bsk = name_skeleton(b) if b else ""
+
+    if nsk:
+        if bsk:
+            doc = await db.products.find_one({"product_name_skeleton": nsk, "brand_skeleton": bsk})
+            if doc:
+                return doc, "skeleton_key"
+        else:
+            cnt = await db.products.count_documents({"product_name_skeleton": nsk})
+            if cnt == 1:
+                doc = await db.products.find_one({"product_name_skeleton": nsk})
+                if doc:
+                    return doc, "skeleton_key_unique"
+
+    name_pat = intercalated_regex(nsk)
+    if not name_pat:
+        return None, None
+
+    q = {"product_name": {"$regex": name_pat, "$options": "i"}}
+    if bsk and len(bsk) >= 2:
+        brand_pat = intercalated_regex(bsk)
+        if brand_pat:
+            q["brand"] = {"$regex": brand_pat, "$options": "i"}
+
+    matches = await db.products.find(q).limit(12).to_list(12)
+    if len(matches) == 1:
+        return matches[0], "spelling_spacing"
+    if len(matches) > 1 and bsk:
+        narrowed = [m for m in matches if name_skeleton(m.get("brand") or "") == bsk]
+        if len(narrowed) == 1:
+            return narrowed[0], "spelling_spacing"
+    return None, None
+
+
 # ── POST /api/analyze ─────────────────────────────────────────────────────────
-# Same signature as your original — file + optional force_new form field
+# phase=lookup — DB + image hash only (no Gemini). phase=vision — full AI pipeline.
 @router.post("/api/analyze")
 async def analyze_label(
     file: UploadFile = File(...),
     force_new: Optional[bool] = Form(False),
+    phase: str = Form("lookup"),
+    user_product_name: str = Form(""),
+    user_brand: str = Form(""),
     user_id: Optional[str] = Depends(optional_user)
 ):
     if not file.content_type or not file.content_type.startswith("image/"):
@@ -73,7 +185,87 @@ async def analyze_label(
     if len(image_bytes) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image size must be under 10MB")
 
-    # Step 1: Extract nutrition data from Gemini
+    phase_norm = (phase or "lookup").strip().lower()
+    if phase_norm not in ("lookup", "vision"):
+        raise HTTPException(status_code=400, detail="phase must be 'lookup' or 'vision'")
+
+    user_entered = (user_product_name or "").strip()
+    brand_entered = (user_brand or "").strip()
+
+    if not user_entered:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter product name (and optional brand) before analyzing — this avoids wasting API calls on repeats."
+        )
+
+    image_hash = sha256_hex(image_bytes)
+
+    # ── Phase 1: lookup only (no Gemini) ─────────────────────────────────────
+    if phase_norm == "lookup":
+        if not force_new:
+            by_hash = await find_by_image_hash(image_hash)
+            if by_hash:
+                await maybe_backfill_skeleton_fields(by_hash)
+                await attach_scan_to_user(user_id, by_hash["_id"])
+                return {
+                    "status": "existing",
+                    "message": "Same image already analyzed — loaded from database (no API call).",
+                    "data": serialize(by_hash),
+                }
+            cached, match_reason = await resolve_cached_product(user_entered, brand_entered)
+            if cached:
+                await maybe_backfill_skeleton_fields(cached)
+                await attach_scan_to_user(user_id, cached["_id"])
+                hint = {
+                    "exact_match": "Exact name match in database.",
+                    "skeleton_key": "Matched ignoring spaces and punctuation (e.g. Good Day vs Goodday).",
+                    "skeleton_key_unique": "Matched by product name spelling variant (unique in catalogue).",
+                    "spelling_spacing": "Matched a catalogue name with different spacing or punctuation.",
+                }.get(match_reason or "", "Product found in database.")
+                return {
+                    "status": "existing",
+                    "message": f"{hint} No API call.",
+                    "match_reason": match_reason,
+                    "data": serialize(cached),
+                }
+        return {
+            "status": "lookup_miss",
+            "message": "No cached result for this name/image. Run AI analysis to read the label (uses 1 API request).",
+            "data": {
+                "user_product_name": user_entered,
+                "user_brand": brand_entered,
+            },
+        }
+
+    # ── Phase 2: vision (Gemini) ─────────────────────────────────────────────
+    if not force_new:
+        by_hash = await find_by_image_hash(image_hash)
+        if by_hash:
+            await maybe_backfill_skeleton_fields(by_hash)
+            await attach_scan_to_user(user_id, by_hash["_id"])
+            return {
+                "status": "existing",
+                "message": "Same image already analyzed — loaded from database (no API call).",
+                "data": serialize(by_hash),
+            }
+
+        cached, match_reason = await resolve_cached_product(user_entered, brand_entered)
+        if cached:
+            await maybe_backfill_skeleton_fields(cached)
+            await attach_scan_to_user(user_id, cached["_id"])
+            hint = {
+                "exact_match": "Exact name match — reusing stored analysis for this product.",
+                "skeleton_key": "Matched ignoring spaces/punctuation — same product as in catalogue.",
+                "skeleton_key_unique": "Matched spelling variant (unique in catalogue).",
+                "spelling_spacing": "Matched catalogue entry with different spacing or punctuation.",
+            }.get(match_reason or "", "Found catalogue match for this product.")
+            return {
+                "status": "existing",
+                "message": f"{hint} No API call.",
+                "match_reason": match_reason,
+                "data": serialize(cached),
+            }
+
     extraction_result = extract_nutrition_from_image(image_bytes)
 
     if not extraction_result["success"]:
@@ -84,8 +276,6 @@ async def analyze_label(
 
     raw_data = extraction_result["data"]
 
-    # Step 2: Reject non-nutrition-label images
-    # Gemini returns mostly null fields when given a non-label image
     required_fields = ["calories", "total_fat", "sodium", "protein"]
     filled = sum(1 for f in required_fields if raw_data.get(f) is not None)
     if filled < 2:
@@ -94,25 +284,8 @@ async def analyze_label(
             detail="This doesn't look like a nutrition label. Please upload a clear photo of a food product's nutrition facts panel."
         )
 
-    product_name = (raw_data.get("product_name") or "").strip()
+    detected_name = (raw_data.get("product_name") or "").strip()
 
-    # Step 3: Duplicate check (skip if force_new)
-    if not force_new:
-        existing = await find_existing(product_name)
-        if existing:
-            # Attach to user history
-            if user_id:
-                await db.users.update_one(
-                    {"_id": ObjectId(user_id)},
-                    {"$addToSet": {"scan_history": str(existing["_id"])}}
-                )
-            return {
-                "status": "existing",
-                "message": "This product was found in our database",
-                "data": serialize(existing)
-            }
-
-    # Step 4: Build analysis (scoring + insights)
     try:
         product = build_product_analysis(raw_data, image_filename=file.filename)
     except Exception as exc:
@@ -122,37 +295,93 @@ async def analyze_label(
         )
 
     try:
-        product_dict = product.model_dump()   # Pydantic v2
+        product_dict = product.model_dump()
     except AttributeError:
-        product_dict = product.dict()          # Pydantic v1 fallback
+        product_dict = product.dict()
 
+    product_dict["product_name"] = user_entered
+    product_dict["brand"] = brand_entered
+    product_dict["label_image_hash"] = image_hash
+    product_dict["vision_detected_product_name"] = detected_name or None
     product_dict["score_label"] = score_to_label(product_dict.get("health_score", 0))
     product_dict["scanned_at"] = datetime.utcnow()
+    product_dict.update(skeleton_field_updates(product_dict["product_name"], product_dict.get("brand") or ""))
 
-    # Step 5: If no product name — return analysis WITHOUT storing in DB
-    # Frontend will show manual entry form; user can save name via /api/store-product
-    if not product_name:
+    # Forced re-scan: always overwrite the row tied to this exact image bytes (one row per fingerprint)
+    if force_new:
+        old_by_hash = await find_by_image_hash(image_hash)
+        if old_by_hash:
+            oid = old_by_hash["_id"]
+            update_payload = {k: v for k, v in product_dict.items() if k != "_id"}
+            await db.products.update_one({"_id": oid}, {"$set": update_payload})
+            updated = await db.products.find_one({"_id": oid})
+            await attach_scan_to_user(user_id, oid)
+            return {
+                "status": "updated",
+                "message": "Fresh scan complete; this image fingerprint was updated in the database.",
+                "data": serialize(updated),
+            }
+
+    # If vision name matches what user typed (or label had no name): upsert under user's identity
+    if names_equivalent(detected_name, user_entered):
+        existing_user, _ = await resolve_cached_product(user_entered, brand_entered)
+        if existing_user:
+            oid = existing_user["_id"]
+            update_payload = {k: v for k, v in product_dict.items() if k != "_id"}
+            await db.products.update_one({"_id": oid}, {"$set": update_payload})
+            updated = await db.products.find_one({"_id": oid})
+            await attach_scan_to_user(user_id, oid)
+            return {
+                "status": "updated",
+                "message": "Label re-analyzed and database entry updated.",
+                "data": serialize(updated),
+            }
+        insert_result = await db.products.insert_one(product_dict)
+        product_dict["_id"] = str(insert_result.inserted_id)
+        await attach_scan_to_user(user_id, insert_result.inserted_id)
         return {
-            "status": "needs_name",
-            "message": "Product analyzed but name not detected. Please enter the product name to save.",
-            "data": product_dict   # no _id yet — not stored
+            "status": "new",
+            "message": "Product analyzed and stored successfully",
+            "data": product_dict,
         }
 
-    # Step 6: Store in DB
+    # Vision detected a different product name than user entered
+    det_brand = (raw_data.get("brand") or "").strip()
+    existing_det, _ = await resolve_cached_product(detected_name, det_brand)
+    if not existing_det and detected_name:
+        existing_det, _ = await resolve_cached_product(detected_name, "")
+    if existing_det:
+        await attach_scan_to_user(user_id, existing_det["_id"])
+        return {
+            "status": "existing",
+            "message": (
+                f"The label appears to be for “{detected_name}”, which differs from what you entered. "
+                "Returning the existing database record for the detected name."
+            ),
+            "warning": "vision_name_mismatch",
+            "data": serialize(existing_det),
+        }
+
+    existing_user, _ = await resolve_cached_product(user_entered, brand_entered)
+    if existing_user:
+        oid = existing_user["_id"]
+        update_payload = {k: v for k, v in product_dict.items() if k != "_id"}
+        await db.products.update_one({"_id": oid}, {"$set": update_payload})
+        updated = await db.products.find_one({"_id": oid})
+        await attach_scan_to_user(user_id, oid)
+        return {
+            "status": "updated",
+            "message": "Stored under your product name; vision read a different name on the label.",
+            "data": serialize(updated),
+        }
+
     insert_result = await db.products.insert_one(product_dict)
     product_dict["_id"] = str(insert_result.inserted_id)
-
-    # Attach to user history
-    if user_id:
-        await db.users.update_one(
-            {"_id": ObjectId(user_id)},
-            {"$addToSet": {"scan_history": str(insert_result.inserted_id)}}
-        )
-
+    await attach_scan_to_user(user_id, insert_result.inserted_id)
     return {
         "status": "new",
         "message": "Product analyzed and stored successfully",
-        "data": product_dict
+        "data": product_dict,
     }
 
 
@@ -170,8 +399,7 @@ async def store_product(
     if not product_name:
         raise HTTPException(status_code=400, detail="Product name is required to save")
 
-    # Check duplicate again with the name the user just entered
-    existing = await find_existing(product_name)
+    existing, _ = await resolve_cached_product(product_name, brand)
     if existing:
         if user_id:
             await db.users.update_one(
@@ -189,6 +417,7 @@ async def store_product(
     product_dict["product_name"] = product_name
     product_dict["brand"] = brand
     product_dict["scanned_at"] = datetime.utcnow()
+    product_dict.update(skeleton_field_updates(product_name, brand))
 
     insert_result = await db.products.insert_one(product_dict)
     product_dict["_id"] = str(insert_result.inserted_id)
@@ -211,9 +440,15 @@ async def store_product(
 @router.patch("/api/history/{product_id}/update-name")
 async def update_name(product_id: str, data: dict = Body(...)):
     try:
+        pname = data.get("product_name", "") or ""
+        b = data.get("brand", "") or ""
         await db.products.update_one(
             {"_id": ObjectId(product_id)},
-            {"$set": {"product_name": data.get("product_name", ""), "brand": data.get("brand", "")}}
+            {"$set": {
+                "product_name": pname,
+                "brand": b,
+                **skeleton_field_updates(pname, b),
+            }}
         )
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid product ID")

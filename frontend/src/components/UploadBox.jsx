@@ -1,126 +1,100 @@
-import { useState, useRef } from 'react'
+import { useRef, useState } from 'react';
 
-function UploadBox({ onAnalyze, isLoading }) {
-  const [dragOver, setDragOver] = useState(false)
-  const [preview, setPreview] = useState(null)
-  const [selectedFile, setSelectedFile] = useState(null)
-  const [error, setError] = useState(null)
-  const fileInputRef = useRef(null)
+const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_MB = 10;
+
+export default function UploadBox({ onUpload, disabled }) {
+  const [dragOver, setDragOver] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [fileError, setFileError] = useState('');
+  const inputRef = useRef();
+
+  const validate = (file) => {
+    if (!ALLOWED.includes(file.type)) {
+      setFileError('Only JPG, PNG, and WebP images are allowed.');
+      return false;
+    }
+    if (file.size > MAX_MB * 1024 * 1024) {
+      setFileError(`Image too large. Max size is ${MAX_MB}MB.`);
+      return false;
+    }
+    return true;
+  };
 
   const handleFile = (file) => {
-    setError(null)
-
-    if (!file.type.startsWith('image/')) {
-      setError('Please upload an image file')
-      return
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      setError('Image must be under 10MB')
-      return
-    }
-
-    setSelectedFile(file)
-    const reader = new FileReader()
-    reader.onload = (e) => setPreview(e.target.result)
-    reader.readAsDataURL(file)
-  }
+  setFileError('');
+  if (!validate(file)) return;
+  if (disabled) return;   // ← add this guard
+  const url = URL.createObjectURL(file);
+  setPreview(url);
+  onUpload(file);
+};
 
   const handleDrop = (e) => {
-    e.preventDefault()
-    setDragOver(false)
-    const file = e.dataTransfer.files[0]
-    if (file) handleFile(file)
-  }
+    e.preventDefault();
+    setDragOver(false);
+    if (disabled) return;
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
 
-  const handleDragOver = (e) => {
-    e.preventDefault()
-    setDragOver(true)
-  }
+  const handleChange = (e) => {
+    const file = e.target.files[0];
+    if (file) handleFile(file);
+    e.target.value = '';
+  };
 
-  const handleDragLeave = () => setDragOver(false)
-
-  const handleInputChange = (e) => {
-    const file = e.target.files[0]
-    if (file) handleFile(file)
-  }
-
-  const handleSubmit = () => {
-    if (selectedFile && onAnalyze) {
-      onAnalyze(selectedFile)
-    }
-  }
-
-  const handleClear = () => {
-    setPreview(null)
-    setSelectedFile(null)
-    setError(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
+  const removePreview = (e) => {
+    e.stopPropagation();
+    setPreview(null);
+    setFileError('');
+  };
 
   return (
-    <div className="upload-container">
-      <div
-        className={`upload-box ${dragOver ? 'drag-over' : ''} ${preview ? 'has-preview' : ''}`}
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onClick={() => !preview && fileInputRef.current.click()}
-      >
-        {!preview ? (
-          <div className="upload-placeholder">
-            <div className="upload-icon">📸</div>
-            <h3>Upload Nutrition Label</h3>
-            <p>Drag and drop or click to browse</p>
-            <p className="upload-hint">Supports JPG, PNG, WEBP up to 10MB</p>
-          </div>
-        ) : (
-          <div className="preview-container">
-            <img src={preview} alt="Preview" className="preview-image" />
-            <div className="preview-overlay">
-              <span>Click analyze to scan this label</span>
-            </div>
-          </div>
-        )}
-      </div>
+    <div
+      className={`upload-box${dragOver ? ' drag-over' : ''}`}
+      onClick={() => !disabled && inputRef.current?.click()}
+      onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => e.key === 'Enter' && inputRef.current?.click()}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={handleChange}
+        style={{ display: 'none' }}
+        disabled={disabled}
+      />
 
-      {error && <p className="upload-error">{error}</p>}
-
-      {preview && (
-        <div className="upload-actions">
-          <button
-            className="btn-secondary"
-            onClick={handleClear}
-            disabled={isLoading}
-          >
-            Clear
-          </button>
-          <button
-            className="btn-primary"
-            onClick={handleSubmit}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <span className="loading-text">
-                <span className="spinner"></span>
-                Analyzing...
-              </span>
-            ) : (
-              '🔍 Analyze Label'
-            )}
-          </button>
+      {preview ? (
+        <div className="upload-preview" onClick={e => e.stopPropagation()}>
+          <img src={preview} alt="Selected label" />
+          <button className="upload-preview-remove" onClick={removePreview} title="Remove">✕</button>
         </div>
+      ) : (
+        <>
+          <div className="upload-icon">
+            {dragOver ? '📥' : '📸'}
+          </div>
+          <div className="upload-title">
+            {dragOver ? 'Drop it here!' : 'Upload a nutrition label'}
+          </div>
+          <div className="upload-sub">
+            Drag & drop or click to browse
+          </div>
+          <div className="upload-hint">
+            JPG, PNG, WebP · Max {MAX_MB}MB · Clear, well-lit photos work best
+          </div>
+        </>
       )}
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleInputChange}
-        style={{ display: 'none' }}
-      />
+      {fileError && (
+        <div className="form-error" style={{ marginTop: '0.75rem' }}>{fileError}</div>
+      )}
     </div>
-  )
+  );
 }
-
-export default UploadBox

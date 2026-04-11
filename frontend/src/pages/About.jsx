@@ -1,214 +1,166 @@
-import { NavLink, Link } from 'react-router-dom'
+const FEATURES = [
+  { icon: '🤖', title: 'AI Vision Extraction', desc: 'Google Gemini 2.5 Flash reads nutrition labels directly from images — no OCR, no manual entry.' },
+  { icon: '📊', title: 'Transparent Scoring', desc: 'Rule-based weighted engine scores 6 key nutrients. Every point has a clear mathematical justification.' },
+  { icon: '📅', title: 'Consumption Frequency', desc: 'AI recommends how often you should consume a product — from Daily to Avoid — based on its nutritional profile.' },
+  { icon: '⚡', title: 'Duplicate Detection', desc: 'Upload the same product twice and get instant results from cache. No redundant Gemini API calls.' },
+  { icon: '🗂️', title: 'Global Catalogue', desc: 'Every scanned product is added to a shared A-Z database accessible to all users for browsing and discovery.' },
+  { icon: '👤', title: 'Per-User History', desc: 'Your scan history is private to you. Removing from history keeps the product in the shared catalogue.' },
+];
 
-function About({ toggleTheme, theme }) {
-  const steps = [
-    {
-      icon: "📸",
-      title: "Upload Label",
-      description:
-        "Take a photo of any packaged food nutrition label and upload it to IngreSight",
-    },
-    {
-      icon: "🤖",
-      title: "AI Extraction",
-      description:
-        "Google Gemini Vision AI reads the label and extracts all nutrition values with high accuracy",
-    },
-    {
-      icon: "⚖️",
-      title: "Health Scoring",
-      description:
-        "Our rule-based scoring engine evaluates each nutrient using WHO and FDA guidelines",
-    },
-    {
-      icon: "📊",
-      title: "Insights Generated",
-      description:
-        "AI generates personalised health insights, consumption frequency and recommendations",
-    },
-  ];
+const SCORING_ROWS = [
+  { nutrient: 'Calories',       weight: 25, reason: 'Primary driver of weight gain and energy imbalance' },
+  { nutrient: 'Sugar',          weight: 25, reason: 'Strongly linked to diabetes, obesity, and metabolic disease' },
+  { nutrient: 'Sodium',         weight: 20, reason: 'Major cause of hypertension and cardiovascular risk' },
+  { nutrient: 'Total Fat',      weight: 15, reason: 'Saturated fat directly impacts cholesterol and heart health' },
+  { nutrient: 'Dietary Fiber',  weight: 10, reason: 'Beneficial — improves digestion and lowers cholesterol' },
+  { nutrient: 'Protein',        weight: 5,  reason: 'Essential for muscle repair and satiety' },
+];
 
-  const nutrients = [
-    {
-      name: "Calories",
-      weight: "25%",
-      description: "Primary driver of weight gain",
-    },
-    {
-      name: "Sugar",
-      weight: "25%",
-      description: "Linked to diabetes and obesity",
-    },
-    {
-      name: "Sodium",
-      weight: "20%",
-      description: "Major cause of hypertension",
-    },
-    {
-      name: "Fat",
-      weight: "15%",
-      description: "Saturated fat affects heart health",
-    },
-    { name: "Fiber", weight: "10%", description: "Beneficial for digestion" },
-    {
-      name: "Protein",
-      weight: "5%",
-      description: "Essential for muscle and satiety",
-    },
-  ];
+const SCORE_LABELS = [
+  { range: '75 – 100', label: 'Healthy',    color: 'var(--healthy)',   desc: 'Safe for regular, even daily consumption' },
+  { range: '50 – 74',  label: 'Moderate',   color: 'var(--moderate)',  desc: 'Fine a few times a week with a balanced diet' },
+  { range: '25 – 49',  label: 'Unhealthy',  color: 'var(--unhealthy)', desc: 'Limit to occasional treats — once a week or less' },
+  { range: '0 – 24',   label: 'Poor',       color: 'var(--poor)',      desc: 'Best avoided or consumed very rarely' },
+];
 
-  const techStack = [
-    { name: "React + Vite", role: "Frontend", color: "#38bdf8" },
-    { name: "FastAPI", role: "Backend", color: "#4ade80" },
-    { name: "MongoDB Atlas", role: "Database", color: "#34d399" },
-    { name: "Gemini 2.5 Flash", role: "AI Vision", color: "#a78bfa" },
-    { name: "Render", role: "Backend Host", color: "#fb923c" },
-    { name: "Vercel", role: "Frontend Host", color: "#94a3b8" },
-  ];
+const STACK = [
+  { layer: 'Frontend',       tech: 'React + Vite (JavaScript)' },
+  { layer: 'Backend',        tech: 'Python + FastAPI' },
+  { layer: 'Database',       tech: 'MongoDB Atlas (Free Tier)' },
+  { layer: 'AI Vision',      tech: 'Google Gemini 2.5 Flash' },
+  { layer: 'Auth',           tech: 'JWT + bcrypt (passlib)' },
+  { layer: 'Frontend Host',  tech: 'Vercel' },
+  { layer: 'Backend Host',   tech: 'Render' },
+];
+
+export default function About() {
   return (
-    <div className="about-page">
-      <nav className="navbar">
-  <div className="navbar-brand">
-    <span className="navbar-logo">🥗</span>
-    <span className="navbar-title">IngreSight</span>
-  </div>
-  <div className="navbar-links">
-    <NavLink to="/" end className={({ isActive }) => isActive ? 'navbar-link active-link' : 'navbar-link'}>Home</NavLink>
-    <NavLink to="/about" className={({ isActive }) => isActive ? 'navbar-link active-link' : 'navbar-link'}>About</NavLink>
-    <NavLink to="/stats" className={({ isActive }) => isActive ? 'navbar-link active-link' : 'navbar-link'}>Stats</NavLink>
-    <NavLink to="/history" className={({ isActive }) => isActive ? 'navbar-link active-link' : 'navbar-link'}>History</NavLink>
-    <button className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
-      {theme === 'dark' ? (
-        <svg viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="5"/>
-          <line x1="12" y1="1" x2="12" y2="3"/>
-          <line x1="12" y1="21" x2="12" y2="23"/>
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-          <line x1="1" y1="12" x2="3" y2="12"/>
-          <line x1="21" y1="12" x2="23" y2="12"/>
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-        </svg>
-      ) : (
-        <svg viewBox="0 0 24 24">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-        </svg>
-      )}
-    </button>
-  </div>
-</nav>
-
-      <div className="about-content">
-        <div className="about-hero">
-          <h1 className="hero-title">
-            About <span className="gradient-text">IngreSight</span>
-          </h1>
-          <p className="hero-subtitle">
-            An AI-powered nutrition label analyzer that helps you make informed
-            food choices through intelligent health scoring and personalized
-            insights
-          </p>
-        </div>
-
-        <section className="about-section">
-          <h2 className="about-section-title">How It Works</h2>
-          <div className="steps-grid">
-            {steps.map((step, i) => (
-              <div key={i} className="step-card">
-                <div className="step-number">{i + 1}</div>
-                <div className="step-icon">{step.icon}</div>
-                <h3 className="step-title">{step.title}</h3>
-                <p className="step-description">{step.description}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="about-section">
-          <h2 className="about-section-title">Scoring Model</h2>
-          <p className="about-section-subtitle">
-            Our transparent rule-based scoring system evaluates six key
-            nutrients. Each nutrient receives a sub-score from 0-100 which is
-            combined using weighted averaging to produce the final health score.
-          </p>
-          <div className="scoring-table">
-            {nutrients.map((nutrient, i) => (
-              <div key={i} className="scoring-row">
-                <div className="scoring-left">
-                  <span className="scoring-name">{nutrient.name}</span>
-                  <span className="scoring-desc">{nutrient.description}</span>
-                </div>
-                <div className="scoring-weight">{nutrient.weight}</div>
-              </div>
-            ))}
-          </div>
-          <div className="scoring-note">
-            <span>💡</span>
-            <p>
-              Score of 75-100 = Healthy · 50-74 = Moderate · 25-49 = Unhealthy ·
-              0-24 = Poor
-            </p>
-          </div>
-        </section>
-
-        <section className="about-section">
-          <h2 className="about-section-title">Tech Stack</h2>
-          <div className="tech-grid">
-            {techStack.map((tech, i) => (
-              <div key={i} className="tech-card">
-                <span className="tech-name" style={{ color: tech.color }}>
-                  {tech.name}
-                </span>
-                <span className="tech-role">{tech.role}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="about-section">
-          <h2 className="about-section-title">Limitations</h2>
-          <div className="limitations-list">
-            <div className="limitation-item">
-              <span className="limitation-icon">⚠️</span>
-              <div>
-                <p className="limitation-title">Per Serving Assumption</p>
-                <p className="limitation-desc">
-                  All scores are calculated based on per-serving values. Labels
-                  showing per 100g values may produce different scores.
-                </p>
-              </div>
-            </div>
-            <div className="limitation-item">
-              <span className="limitation-icon">⚠️</span>
-              <div>
-                <p className="limitation-title">Image Quality Dependent</p>
-                <p className="limitation-desc">
-                  Accuracy depends on image clarity. Blurry or partially visible
-                  labels may result in incomplete extraction.
-                </p>
-              </div>
-            </div>
-            <div className="limitation-item">
-              <span className="limitation-icon">⚠️</span>
-              <div>
-                <p className="limitation-title">Ultra-Processed Food Penalty</p>
-                <p className="limitation-desc">
-                  Current model scores individual nutrients only. Future
-                  versions will include processing level as a scoring factor.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
+    <div className="page">
+      {/* Hero */}
+      <div className="about-hero">
+        <h1 className="about-title">About IngreSight</h1>
+        <p className="about-subtitle">
+          A hybrid AI + rule-based system for transparent, explainable nutritional analysis —
+          built as a minor academic project in Computer Science.
+        </p>
+        <br />
+        <p className="about-subtitle">
+          Note that this website is not designed for mobile interfaces, would like to explore in future :)
+        </p>
       </div>
 
-      <footer className="footer">
-        <p>IngreSight — AI Nutritional Label Analyzer</p>
-        <p className="footer-sub">Minor Project · Computer Science</p>
-      </footer>
+      {/* Features grid */}
+      <div className="about-grid">
+        {FEATURES.map(f => (
+          <div className="about-feature-card" key={f.title}>
+            <div className="about-feature-icon">{f.icon}</div>
+            <div className="about-feature-title">{f.title}</div>
+            <div className="about-feature-desc">{f.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Scoring model */}
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="profile-section-title" style={{ marginBottom: '1.25rem' }}>
+          Scoring Model
+        </div>
+        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1.25rem', lineHeight: 1.7 }}>
+          Each nutrient is independently scored 0–100 against WHO and FDA daily reference values,
+          then combined using a weighted average. Beneficial nutrients (fiber, protein) are
+          scored higher when their values are higher. Harmful nutrients (sugar, sodium, fat, calories)
+          are scored higher when their values are lower.
+        </p>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="scoring-table">
+            <thead>
+              <tr>
+                <th>Nutrient</th>
+                <th>Weight</th>
+                <th style={{ minWidth: 80 }}>Visual</th>
+                <th>Rationale</th>
+              </tr>
+            </thead>
+            <tbody>
+              {SCORING_ROWS.map(row => (
+                <tr key={row.nutrient}>
+                  <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{row.nutrient}</td>
+                  <td style={{ fontWeight: 700, color: 'var(--accent)' }}>{row.weight}%</td>
+                  <td>
+                    <div className="weight-bar">
+                      <div className="weight-track">
+                        <div className="weight-fill" style={{ width: `${row.weight * 4}%` }} />
+                      </div>
+                    </div>
+                  </td>
+                  <td>{row.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Score labels */}
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="profile-section-title" style={{ marginBottom: '1.25rem' }}>Score Labels</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem' }}>
+          {SCORE_LABELS.map(s => (
+            <div key={s.label} style={{
+              padding: '1rem',
+              borderRadius: 'var(--radius-md)',
+              border: `1px solid ${s.color}40`,
+              background: `${s.color}12`,
+            }}>
+              <div style={{ fontWeight: 700, color: s.color, marginBottom: '0.25rem' }}>
+                {s.range} — {s.label}
+              </div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{s.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tech stack */}
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="profile-section-title" style={{ marginBottom: '1.25rem' }}>Tech Stack</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.6rem' }}>
+          {STACK.map(s => (
+            <div key={s.layer} style={{
+              display: 'flex', gap: '0.75rem', alignItems: 'center',
+              padding: '0.65rem 0.85rem',
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border-default)',
+              borderRadius: 'var(--radius-md)',
+            }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', width: 90, flexShrink: 0 }}>
+                {s.layer.toUpperCase()}
+              </div>
+              <div style={{ fontSize: '0.88rem', color: 'var(--text-primary)', fontWeight: 500 }}>{s.tech}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Academic note */}
+      <div style={{
+        background: 'var(--accent-glow)',
+        border: '1px solid var(--border-hover)',
+        borderRadius: 'var(--radius-lg)',
+        padding: '1.25rem 1.5rem',
+      }}>
+        <div style={{ fontWeight: 700, color: 'var(--accent)', marginBottom: '0.4rem', fontSize: '0.9rem' }}>
+          📚 Academic Context
+        </div>
+        <div style={{ fontSize: '0.87rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+          <strong style={{ color: 'var(--text-primary)' }}>Project Title:</strong> AI Agent for Nutritional Label Analysis and Health Risk Evaluation
+          <br />
+          <strong style={{ color: 'var(--text-primary)' }}>Type:</strong> Minor Academic Project — Computer Science
+          <br />
+          <strong style={{ color: 'var(--text-primary)' }}>Key Points:</strong> Hybrid AI + rule-based scoring (transparent & explainable) ·
+          Cloud-native architecture · RESTful API design · Dynamic duplicate-aware product catalogue with per-user history
+        </div>
+      </div>
     </div>
   );
 }
-
-export default About;

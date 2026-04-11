@@ -1,158 +1,113 @@
-function NutritionTable({ nutrition, scoreBreakdown }) {
+import { useEffect, useState } from 'react';
 
-  const nutrients = [
-    {
-      key: 'calories',
-      label: 'Calories',
-      value: nutrition?.calories,
-      unit: 'kcal',
-      scoreKey: 'calories',
-      higherIsBetter: false,
-    },
-    {
-      key: 'total_fat',
-      label: 'Total Fat',
-      value: nutrition?.total_fat,
-      unit: 'g',
-      scoreKey: 'fat',
-      higherIsBetter: false,
-    },
-    {
-      key: 'saturated_fat',
-      label: 'Saturated Fat',
-      value: nutrition?.saturated_fat,
-      unit: 'g',
-      scoreKey: null,
-      higherIsBetter: false,
-    },
-    {
-      key: 'trans_fat',
-      label: 'Trans Fat',
-      value: nutrition?.trans_fat,
-      unit: 'g',
-      scoreKey: null,
-      higherIsBetter: false,
-    },
-    {
-      key: 'cholesterol',
-      label: 'Cholesterol',
-      value: nutrition?.cholesterol,
-      unit: 'mg',
-      scoreKey: null,
-      higherIsBetter: false,
-    },
-    {
-      key: 'sodium',
-      label: 'Sodium',
-      value: nutrition?.sodium,
-      unit: 'mg',
-      scoreKey: 'sodium',
-      higherIsBetter: false,
-    },
-    {
-      key: 'total_carbohydrates',
-      label: 'Total Carbohydrates',
-      value: nutrition?.total_carbohydrates,
-      unit: 'g',
-      scoreKey: null,
-      higherIsBetter: false,
-    },
-    {
-      key: 'dietary_fiber',
-      label: 'Dietary Fiber',
-      value: nutrition?.dietary_fiber,
-      unit: 'g',
-      scoreKey: 'fiber',
-      higherIsBetter: true,
-    },
-    {
-      key: 'total_sugars',
-      label: 'Total Sugars',
-      value: nutrition?.total_sugars,
-      unit: 'g',
-      scoreKey: 'sugar',
-      higherIsBetter: false,
-    },
-    {
-      key: 'added_sugars',
-      label: 'Added Sugars',
-      value: nutrition?.added_sugars,
-      unit: 'g',
-      scoreKey: null,
-      higherIsBetter: false,
-    },
-    {
-      key: 'protein',
-      label: 'Protein',
-      value: nutrition?.protein,
-      unit: 'g',
-      scoreKey: 'protein',
-      higherIsBetter: true,
-    },
-  ]
+// Maps display info to the actual field names from your NutritionData Pydantic model
+// and score_breakdown keys from scoring_service.py
+const NUTRIENTS = [
+  { nutritionKey: 'calories',           scoreKey: 'calories', label: 'Calories',           unit: 'kcal', weight: 25 },
+  { nutritionKey: 'total_sugars',       scoreKey: 'sugar',    label: 'Total Sugars',        unit: 'g',    weight: 25 },
+  { nutritionKey: 'sodium',             scoreKey: 'sodium',   label: 'Sodium',              unit: 'mg',   weight: 20 },
+  { nutritionKey: 'total_fat',          scoreKey: 'fat',      label: 'Total Fat',           unit: 'g',    weight: 15 },
+  { nutritionKey: 'dietary_fiber',      scoreKey: 'fiber',    label: 'Dietary Fiber',       unit: 'g',    weight: 10 },
+  { nutritionKey: 'protein',            scoreKey: 'protein',  label: 'Protein',             unit: 'g',    weight: 5  },
+];
 
-  const getBarColor = (score) => {
-    if (score >= 75) return '#00ff88'
-    if (score >= 50) return '#ffcc00'
-    if (score >= 25) return '#ff8800'
-    return '#ff4444'
-  }
+// Extra nutrients to display info-only (no score bar)
+const EXTRA_NUTRIENTS = [
+  { nutritionKey: 'saturated_fat',         label: 'Saturated Fat',        unit: 'g'  },
+  { nutritionKey: 'trans_fat',             label: 'Trans Fat',            unit: 'g'  },
+  { nutritionKey: 'cholesterol',           label: 'Cholesterol',          unit: 'mg' },
+  { nutritionKey: 'total_carbohydrates',   label: 'Total Carbohydrates',  unit: 'g'  },
+  { nutritionKey: 'added_sugars',          label: 'Added Sugars',         unit: 'g'  },
+];
 
-  const filteredNutrients = nutrients.filter(n => n.value !== null && n.value !== undefined)
-
-  return (
-    <div className="nutrition-table">
-      <h3 className="section-title">📊 Nutrition Breakdown</h3>
-
-      {nutrition?.serving_size && (
-        <p className="serving-info">
-          Per serving: {nutrition.serving_size}
-        </p>
-      )}
-
-      <div className="nutrient-list">
-        {filteredNutrients.map((nutrient) => {
-          const score = nutrient.scoreKey ? scoreBreakdown?.[nutrient.scoreKey] : null
-
-          return (
-            <div key={nutrient.key} className="nutrient-row">
-              <div className="nutrient-info">
-                <span className="nutrient-label">{nutrient.label}</span>
-                <span className="nutrient-value">
-                  {nutrient.value}{nutrient.unit}
-                </span>
-              </div>
-
-              {score !== null && (
-                <div className="nutrient-bar-container">
-                  <div
-                    className="nutrient-bar"
-                    style={{
-                      width: `${score}%`,
-                      backgroundColor: getBarColor(score),
-                    }}
-                  />
-                  <span
-                    className="nutrient-score"
-                    style={{ color: getBarColor(score) }}
-                  >
-                    {score}/100
-                  </span>
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="score-legend">
-        <span style={{ color: '#00ff88' }}>● Excellent</span>
-        <span style={{ color: '#ffcc00' }}>● Good</span>
-        <span style={{ color: '#ff8800' }}>● Fair</span>
-        <span style={{ color: '#ff4444' }}>● Poor</span>
-      </div>
-    </div>
-  )
+function subScoreColor(score) {
+  if (score >= 70) return 'var(--healthy)';
+  if (score >= 45) return 'var(--moderate)';
+  return 'var(--unhealthy)';
 }
 
-export default NutritionTable
+export default function NutritionTable({ product }) {
+  const [animated, setAnimated] = useState(false);
+
+  useEffect(() => {
+    setAnimated(false);
+    const t = setTimeout(() => setAnimated(true), 150);
+    return () => clearTimeout(t);
+  }, [product?.id]);
+
+  // nutrition is nested object: product.nutrition.calories, product.nutrition.total_fat, etc.
+  const nutrition = product?.nutrition ?? {};
+
+  // score_breakdown has keys: calories, sugar, sodium, fat, fiber, protein (values 0-100)
+  const breakdown = product?.score_breakdown ?? {};
+
+  return (
+    <div className="nutrition-card">
+      <div className="nutrition-card-title">Nutrient Breakdown</div>
+
+      {/* ── Scored nutrients (with animated sub-score bar) ── */}
+      {NUTRIENTS.map(({ nutritionKey, scoreKey, label, unit, weight }) => {
+        const val = nutrition[nutritionKey];
+        const sub = breakdown[scoreKey] ?? null;
+
+        // Skip if we have neither value nor score
+        if (val == null && sub == null) return null;
+
+        const barWidth = sub ?? 50;
+        const color = subScoreColor(barWidth);
+
+        return (
+          <div className="nutrient-row" key={nutritionKey}>
+            <div className="nutrient-name">{label}</div>
+            <div className="nutrient-value">
+              {val != null ? `${val} ${unit}` : '—'}
+            </div>
+            <div className="nutrient-bar-wrap">
+              <div className="nutrient-bar-track">
+                <div
+                  className="nutrient-bar-fill"
+                  style={{
+                    width: animated ? `${barWidth}%` : '0%',
+                    background: color,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* ── Extra nutrients (info only, no score bar) ─────── */}
+      {EXTRA_NUTRIENTS.map(({ nutritionKey, label, unit }) => {
+        const val = nutrition[nutritionKey];
+        if (val == null) return null;
+        return (
+          <div className="nutrient-row" key={nutritionKey} style={{ opacity: 0.75 }}>
+            <div className="nutrient-name" style={{ color: 'var(--text-secondary)' }}>{label}</div>
+            <div className="nutrient-value">{val} {unit}</div>
+            <div className="nutrient-bar-wrap" />
+          </div>
+        );
+      })}
+
+      {/* ── Serving info ──────────────────────────────────── */}
+      {(nutrition.serving_size || nutrition.servings_per_container) && (
+        <div className="text-muted" style={{ marginTop: '1rem', fontSize: '0.78rem' }}>
+          {nutrition.serving_size && <>Serving size: {nutrition.serving_size}</>}
+          {nutrition.serving_size && nutrition.servings_per_container && ' · '}
+          {nutrition.servings_per_container && <>Servings per container: {nutrition.servings_per_container}</>}
+        </div>
+      )}
+
+      {/* ── Scoring weights note ──────────────────────────── */}
+      <div className="text-muted" style={{
+        marginTop: '0.75rem',
+        fontSize: '0.78rem',
+        borderTop: '1px solid var(--border-default)',
+        paddingTop: '0.75rem'
+      }}>
+        Scoring weights — Calories & Sugar: 25% each · Sodium: 20% · Fat: 15% · Fiber: 10% · Protein: 5%
+      </div>
+    </div>
+  );
+}

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import UploadBox from '../components/UploadBox';
 import ScoreCard from '../components/ScoreCard';
 import NutritionTable from '../components/NutritionTable';
-import { analyzeLabel, storeProduct, getStats } from '../services/api';
+import { analyzeLabel, getStats } from '../services/api';
 
 const STEPS = [
   'Reading nutrition label…',
@@ -18,28 +18,26 @@ export default function Home() {
   const navigate = useNavigate();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingVision, setLoadingVision] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [stepIdx, setStepIdx] = useState(0);
   const [stepsCompleted, setStepsCompleted] = useState([]);
   const [totalProducts, setTotalProducts] = useState(null);
 
-  // Manual name entry
-  const [showManualInput, setShowManualInput] = useState(false);
-  const [productName, setProductName] = useState('');
-  const [brand, setBrand] = useState('');
-  const [pendingData, setPendingData] = useState(null);
-  const [savingName, setSavingName] = useState(false);
-
+  const [formProductName, setFormProductName] = useState('');
+  const [formBrand, setFormBrand] = useState('');
   const [currentFile, setCurrentFile] = useState(null);
+  const [lookupMiss, setLookupMiss] = useState(false);
+  const [lookupMessage, setLookupMessage] = useState('');
 
   useEffect(() => {
     getStats().then(s => setTotalProducts(s.total)).catch(() => {});
   }, []);
 
-  // Step cycling during analysis
   useEffect(() => {
-    if (!isLoading) {
+    const active = isLoading && loadingVision;
+    if (!active) {
       setStepIdx(0);
       setStepsCompleted([]);
       return;
@@ -52,32 +50,39 @@ export default function Home() {
       });
     }, 2000);
     return () => clearInterval(iv);
-  }, [isLoading]);
+  }, [isLoading, loadingVision]);
 
-  const handleAnalyze = async (file, forceNew = false) => {
-    setIsLoading(true);
+  const apiOpts = () => ({
+    userProductName: formProductName.trim(),
+    userBrand: formBrand.trim(),
+  });
+
+  const handleFile = async (file) => {
     setError(null);
     setResult(null);
-    setShowManualInput(false);
-    setPendingData(null);
-    setProductName('');
-    setBrand('');
+    setLookupMiss(false);
+    setLookupMessage('');
+    if (!formProductName.trim()) {
+      setError('Enter the product name first. We check the database before using any AI quota.');
+      return;
+    }
     setCurrentFile(file);
-
+    setIsLoading(true);
+    setLoadingVision(false);
     try {
-      const response = await analyzeLabel(file, forceNew);
-
+      const response = await analyzeLabel(file, { phase: 'lookup', forceNew: false, ...apiOpts() });
       if (response.status === 'existing') {
-        setResult({ ...response.data, _isExisting: true });
-      } else if (response.status === 'needs_name') {
-        setResult(response.data);
-        setPendingData(response.data);
-        setProductName(response.data.product_name || '');
-        setBrand(response.data.brand || '');
-        setShowManualInput(true);
+        setResult({
+          ...response.data,
+          _isExisting: true,
+          _warning: response.warning || null,
+          _matchReason: response.match_reason || null,
+        });
+      } else if (response.status === 'lookup_miss') {
+        setLookupMiss(true);
+        setLookupMessage(response.message || 'No cache hit. Run AI analysis when you are ready.');
       } else {
-        setResult(response.data);
-        setShowManualInput(false);
+        setError(response.message || 'Unexpected response from server.');
       }
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.');
@@ -86,38 +91,60 @@ export default function Home() {
     }
   };
 
-  const handleForceNew = () => {
-    if (currentFile) handleAnalyze(currentFile, true);
+  const runVision = async (forceNew) => {
+    if (!currentFile || !formProductName.trim()) {
+      setError('Select an image and enter a product name.');
+      return;
+    }
+    setError(null);
+    setIsLoading(true);
+    setLoadingVision(true);
+    setLookupMiss(false);
+    try {
+      const response = await analyzeLabel(currentFile, {
+        phase: 'vision',
+        forceNew,
+        ...apiOpts(),
+      });
+      if (response.status === 'existing') {
+        setResult({
+          ...response.data,
+          _isExisting: true,
+          _warning: response.warning || null,
+          _matchReason: response.match_reason || null,
+        });
+      } else if (response.status === 'new' || response.status === 'updated') {
+        setResult({
+          ...response.data,
+          _isExisting: false,
+          _warning: response.warning || null,
+          _matchReason: null,
+        });
+      } else {
+        setError(response.message || 'Unexpected response from server.');
+      }
+    } catch (err) {
+      setError(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setIsLoading(false);
+      setLoadingVision(false);
+    }
   };
 
-  const handleManualSave = async () => {
-    if (!productName.trim()) return;
-    setSavingName(true);
-    try {
-      const response = await storeProduct(pendingData, productName.trim(), brand.trim());
-      setResult(response.data);
-      setPendingData(null);
-      setShowManualInput(false);
-    } catch (err) {
-      setError(err.message || 'Failed to save product name.');
-    } finally {
-      setSavingName(false);
-    }
+  const handleForceNew = () => {
+    runVision(true);
   };
 
   const handleScanAnother = () => {
     setResult(null);
     setError(null);
-    setShowManualInput(false);
-    setPendingData(null);
-    setProductName('');
-    setBrand('');
+    setLookupMiss(false);
+    setLookupMessage('');
     setCurrentFile(null);
   };
 
   return (
     <>
-      {/* ── Hero — always visible ─────────────────────────── */}
       <section className="home-hero">
         <div className="hero-bg" />
         <div className="hero-glow" />
@@ -160,13 +187,74 @@ export default function Home() {
         )}
       </section>
 
-      {/* ── Content area — swaps between upload / loading / results ── */}
       <div className="home-main">
 
-        {/* ── STATE 1: Upload box ───────────────────────────── */}
         {!isLoading && !result && (
           <div className="upload-section">
-            <UploadBox onUpload={handleAnalyze} disabled={false} />
+            <div className="card" style={{
+              marginBottom: '1.25rem',
+              padding: '1rem 1.25rem',
+              border: '1px solid var(--border-default)',
+              borderRadius: 'var(--radius-lg)',
+            }}>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
+                Step 1 — Identify the product
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Product name *</label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="e.g. Classic Salted Chips"
+                    value={formProductName}
+                    onChange={e => setFormProductName(e.target.value)}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Brand (optional)</label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="e.g. Lay's"
+                    value={formBrand}
+                    onChange={e => setFormBrand(e.target.value)}
+                  />
+                </div>
+              </div>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.65rem', marginBottom: 0 }}>
+              </p>
+            </div>
+
+            <div style={{ fontWeight: 600, fontSize: '0.88rem', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
+              Step 2 — Upload label photo
+            </div>
+            <UploadBox onUpload={handleFile} disabled={!formProductName.trim()} />
+
+            {lookupMiss && (
+              <div className="card" style={{
+                marginTop: '1.25rem',
+                padding: '1.1rem 1.25rem',
+                border: '1px solid var(--border-hover)',
+                background: 'var(--accent-glow)',
+              }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.35rem' }}>
+                  Nothing in cache for this name / image
+                </div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                  {lookupMessage} Same image uploaded again later will load from the database without a new API call.
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => runVision(false)}
+                  disabled={!currentFile}
+                >
+                  Run AI analysis
+                </button>
+              </div>
+            )}
+
             {error && (
               <div style={{
                 background: 'rgba(239,68,68,0.08)',
@@ -184,7 +272,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* ── STATE 2: Analyzing checklist ─────────────────── */}
         {isLoading && (
           <div style={{
             background: 'var(--bg-card)',
@@ -195,65 +282,77 @@ export default function Home() {
           }}>
             <div className="spinner" style={{ margin: '0 auto 1.25rem' }} />
             <div style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '1.5rem' }}>
-              Analyzing your label…
+              {loadingVision ? 'Analyzing your label with AI…' : 'Checking database…'}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: 320, margin: '0 auto' }}>
-              {STEPS.map((step, i) => {
-                const isDone = stepsCompleted.includes(i);
-                const isActive = stepIdx === i && !isDone;
-                return (
-                  <div key={i} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.6rem 1rem',
-                    borderRadius: 'var(--radius-md)',
-                    background: isDone
-                      ? 'rgba(16,185,129,0.08)'
-                      : isActive
-                        ? 'var(--accent-glow)'
-                        : 'transparent',
-                    border: `1px solid ${isDone ? 'rgba(16,185,129,0.2)' : isActive ? 'var(--border-hover)' : 'transparent'}`,
-                    transition: 'all 0.3s ease',
-                  }}>
-                    <span style={{
-                      width: 22, height: 22,
-                      borderRadius: '50%',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      flexShrink: 0,
-                      background: isDone ? 'var(--healthy)' : isActive ? 'var(--accent)' : 'var(--bg-input)',
-                      color: isDone || isActive ? '#fff' : 'var(--text-muted)',
-                      border: `1px solid ${isDone ? 'var(--healthy)' : isActive ? 'var(--accent)' : 'var(--border-default)'}`,
+            {loadingVision && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: 320, margin: '0 auto' }}>
+                {STEPS.map((step, i) => {
+                  const isDone = stepsCompleted.includes(i);
+                  const isActive = stepIdx === i && !isDone;
+                  return (
+                    <div key={i} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.6rem 1rem',
+                      borderRadius: 'var(--radius-md)',
+                      background: isDone
+                        ? 'rgba(16,185,129,0.08)'
+                        : isActive
+                          ? 'var(--accent-glow)'
+                          : 'transparent',
+                      border: `1px solid ${isDone ? 'rgba(16,185,129,0.2)' : isActive ? 'var(--border-hover)' : 'transparent'}`,
+                      transition: 'all 0.3s ease',
                     }}>
-                      {isDone ? '✓' : i + 1}
-                    </span>
-                    <span style={{
-                      fontSize: '0.88rem',
-                      color: isDone ? 'var(--healthy)' : isActive ? 'var(--accent)' : 'var(--text-muted)',
-                      fontWeight: isActive ? 600 : 400,
-                    }}>
-                      {step}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+                      <span style={{
+                        width: 22, height: 22,
+                        borderRadius: '50%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        flexShrink: 0,
+                        background: isDone ? 'var(--healthy)' : isActive ? 'var(--accent)' : 'var(--bg-input)',
+                        color: isDone || isActive ? '#fff' : 'var(--text-muted)',
+                        border: `1px solid ${isDone ? 'var(--healthy)' : isActive ? 'var(--accent)' : 'var(--border-default)'}`,
+                      }}>
+                        {isDone ? '✓' : i + 1}
+                      </span>
+                      <span style={{
+                        fontSize: '0.88rem',
+                        color: isDone ? 'var(--healthy)' : isActive ? 'var(--accent)' : 'var(--text-muted)',
+                        fontWeight: isActive ? 600 : 400,
+                      }}>
+                        {step}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── STATE 3: Results ──────────────────────────────── */}
         {result && !isLoading && (
           <div>
-            {/* Top bar */}
             <div className="flex-between mb-2">
               <div>
                 <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Analysis Complete
                 </h2>
                 <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                  {result._isExisting ? '⚡ Returned from database cache' : '✨ Fresh analysis'}
+                  {result._isExisting ? '⚡ Loaded from database ' : '✨ Fresh AI analysis'}
+                  {result._isExisting && result._matchReason === 'skeleton_key' && (
+                    <span> · matched similar spelling (spaces / punctuation)</span>
+                  )}
+                  {result._isExisting && result._matchReason === 'skeleton_key_unique' && (
+                    <span> · matched unique spelling variant</span>
+                  )}
+                  {result._isExisting && result._matchReason === 'spelling_spacing' && (
+                    <span> · matched catalogue name with different spacing</span>
+                  )}
+                  {result._isExisting && result._matchReason === 'exact_match' && (
+                    <span> · exact name match</span>
+                  )}
                 </p>
               </div>
               <button className="btn btn-outline btn-sm" onClick={handleScanAnother}>
@@ -261,57 +360,38 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Manual name entry */}
-            {showManualInput && (
+            {result._warning === 'vision_name_mismatch' && (
               <div className="card" style={{
-                marginBottom: '1.25rem',
-                border: '1px solid var(--border-hover)',
-                background: 'var(--accent-glow)',
+                marginBottom: '1rem',
+                padding: '0.85rem 1rem',
+                border: '1px solid rgba(245,158,11,0.35)',
+                background: 'rgba(245,158,11,0.08)',
+                fontSize: '0.85rem',
+                color: 'var(--text-secondary)',
               }}>
-                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '0.35rem' }}>
-                  🏷️ Product name not detected
-                </div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.1rem' }}>
-                  Score and insights are ready. Enter the product name to save it, or skip for a temporary analysis.
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Product Name *</label>
-                    <input
-                      className="form-input"
-                      type="text"
-                      placeholder="e.g. Classic Salted Chips"
-                      value={productName}
-                      onChange={e => setProductName(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleManualSave()}
-                      autoFocus
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Brand Name</label>
-                    <input
-                      className="form-input"
-                      type="text"
-                      placeholder="e.g. Lays"
-                      value={brand}
-                      onChange={e => setBrand(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleManualSave()}
-                    />
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setShowManualInput(false)}>
-                    Skip — keep as temporary
-                  </button>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    style={{ width: 'auto' }}
-                    onClick={handleManualSave}
-                    disabled={!productName.trim() || savingName}
-                  >
-                    {savingName ? 'Saving…' : 'Save to Database'}
-                  </button>
-                </div>
+                The text on the label looks like a different product than the name you typed. Showing the database
+                entry that matches what was read from the image. If that is wrong, go back and fix the product name,
+                or use “Run fresh scan” if the cached row is not your product.
+              </div>
+            )}
+
+            {result._isExisting && (
+              <div className="card" style={{
+                marginBottom: '1rem',
+                padding: '0.85rem 1rem',
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.75rem',
+                border: '1px solid var(--border-hover)',
+              }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  Not your product? Run a fresh AI read on this photo (uses 1 API request).
+                </span>
+                <button type="button" className="btn btn-outline btn-sm" onClick={handleForceNew} disabled={!currentFile}>
+                  Not your product — run fresh scan
+                </button>
               </div>
             )}
 
@@ -329,7 +409,7 @@ export default function Home() {
               </div>
             )}
 
-            <ScoreCard product={result} onForceNew={handleForceNew} />
+            <ScoreCard product={result} />
             <NutritionTable product={result} />
 
             {!user && (

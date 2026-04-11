@@ -73,11 +73,15 @@ export async function deleteAccount() {
 }
 
 // ── Analyze ───────────────────────────────────────────────────────────────────
-// Matches original signature: file + forceNew flag
-export async function analyzeLabel(file, forceNew = false) {
+// phase: "lookup" = DB + same-image hash only (no Gemini). "vision" = full AI read.
+export async function analyzeLabel(file, opts = {}) {
+  const options = typeof opts === 'boolean' ? { forceNew: opts } : (opts || {});
   const form = new FormData();
   form.append('file', file);
-  form.append('force_new', forceNew ? 'true' : 'false');
+  form.append('force_new', options.forceNew ? 'true' : 'false');
+  form.append('phase', options.phase || 'lookup');
+  form.append('user_product_name', options.userProductName ?? '');
+  form.append('user_brand', options.userBrand ?? '');
 
   const res = await safeFetch(`${BASE}/api/analyze`, {
     method: 'POST',

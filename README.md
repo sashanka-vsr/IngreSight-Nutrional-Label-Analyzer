@@ -10,7 +10,8 @@
 
 ---
 # Deployed Link
-ingresight.vercel.app
+[Live Demo](https://your-deployed-app-link.com)
+
 ## If you clone
 
 1. **Backend:**

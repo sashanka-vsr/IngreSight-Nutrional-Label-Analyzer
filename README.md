@@ -10,7 +10,7 @@
 
 ---
 # Deployed Link
-[Live Demo](https://your-deployed-app-link.com)
+[Live Demo](https://ingresight.vercel.app)
 
 ## If you clone
 

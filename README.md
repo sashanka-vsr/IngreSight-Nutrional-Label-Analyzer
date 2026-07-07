@@ -9,7 +9,8 @@
 **Approach:** Combine AI for reading messy label photos with transparent scoring rules, cache aggressively to limit API use, and keep the public **catalogue** browsable without logging in; scanning stays behind login.
 
 ---
-
+# Deployed Link
+ingresight.vercel.app
 ## If you clone
 
 1. **Backend:**
